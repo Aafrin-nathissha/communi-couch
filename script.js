@@ -139,12 +139,12 @@ async function processTranscript(transcript) {
         vocabSuggestionOutput.textContent = "The sentence is already well-phrased.";
     }
 
-    // 3. Get assistant feedback that includes a follow-up question
-    const responsePrompt = `Act as a friendly communication coach. A user's original sentence was: "${transcript}". The corrected version is: "${correctedText}". Your task is to respond in three parts: First, state the corrected sentence clearly. Second, provide a brief, encouraging reply. Third, ask a natural, open-ended follow-up question to keep the conversation going. Example: "The corrected sentence is: 'I went to the beach yesterday.' That sounds lovely! What was the weather like?"`;
+    // 3. Get assistant conversational reply
+    const responsePrompt = `Act as a friendly communication coach. A user said: "${correctedText}". Your task is to give a brief, encouraging reply and then ask a natural, open-ended follow-up question to keep the conversation going. Do not mention the correction. Example: "That sounds lovely! What was the weather like?"`;
     const assistantFeedback = await callGemini(responsePrompt);
     assistantResponseOutput.textContent = assistantFeedback;
     
-    // 4. Speak the full feedback, which will trigger listening again onend
+    // 4. Speak the conversational reply
     speak(assistantFeedback);
 
     speechLoader.classList.add('hidden');
