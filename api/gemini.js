@@ -1,6 +1,12 @@
-export default async function handler(request) {
-  // Read the prompt from the incoming request
-  const { prompt, isJson } = await request.json();
+export default async function handler(request, response) {
+  // Check if the request method is POST
+  if (request.method !== 'POST') {
+    response.status(405).json({ error: 'Method Not Allowed' });
+    return;
+  }
+
+  // Read the prompt from the request body
+  const { prompt, isJson } = request.body;
 
   // Get the API key securely from Vercel's environment variables
   const API_KEY = process.env.GEMINI_API_KEY;
@@ -24,30 +30,19 @@ export default async function handler(request) {
 
     if (!geminiResponse.ok) {
         const errorText = await geminiResponse.text();
-        return new Response(JSON.stringify({ error: `Gemini API Error: ${errorText}` }), {
-          status: geminiResponse.status,
-          headers: { 'Content-Type': 'application/json' },
-        });
+        response.status(geminiResponse.status).json({ error: `Gemini API Error: ${errorText}` });
+        return;
     }
 
     const result = await geminiResponse.json();
     
     if (result.candidates && result.candidates[0].content.parts[0].text) {
         const content = result.candidates[0].content.parts[0].text;
-        return new Response(JSON.stringify({ content }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
+        response.status(200).json({ content });
     } else {
-        return new Response(JSON.stringify({ error: 'Unexpected API response structure' }), {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' },
-        });
+        response.status(500).json({ error: 'Unexpected API response structure' });
     }
   } catch (error) {
-    return new Response(JSON.stringify({ error: `Server error: ${error.message}` }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    response.status(500).json({ error: `Server error: ${error.message}` });
   }
 }
