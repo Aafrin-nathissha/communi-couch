@@ -58,7 +58,7 @@ tabs.forEach(tab => {
 // --- Secure AI API Integration ---
 async function callGemini(prompt, isJson = false) {
     try {
-        const response = await fetch('/api/gemini', {
+        const response = await fetch('https://communication-coach-cysggqsh6-aafrin-nathisshas-projects.vercel.app/api/gemini', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ prompt, isJson })
@@ -70,9 +70,12 @@ async function callGemini(prompt, isJson = false) {
         }
 
         const result = await response.json();
-        const content = result.content;
         
-        return isJson ? JSON.parse(content) : content;
+        if (result.error) {
+            throw new Error(result.error);
+        }
+        
+        return result.result; // Updated to use 'result' field
 
     } catch (error) {
         console.error("API call failed:", error);
@@ -124,28 +127,51 @@ async function processTranscript(transcript) {
     vocabSuggestionOutput.textContent = '';
     assistantResponseOutput.textContent = '';
     
-    // 1. Correct grammar
-    const correctionPrompt = `Correct the grammar of the following text: "${transcript}"`;
-    const correctedText = await callGemini(correctionPrompt);
-    correctedTextOutput.textContent = correctedText;
+    try {
+        // 1. Enhanced grammar correction with better prompt
+        const correctionPrompt = `You are an expert English grammar checker. Please correct any grammatical errors, spelling mistakes, and punctuation issues in the following text. If the text is already correct, return it as is. Only return the corrected text, nothing else.
 
-    // 2. Get Enhanced Sentence with better vocabulary
-    const vocabPrompt = `Analyze this sentence: "${correctedText}". If possible, replace one word with a more sophisticated or suitable one and return the complete, rewritten sentence. If no improvement can be made, return a JSON object with a key "enhanced_sentence" set to "None". Otherwise, return a JSON object with the key "enhanced_sentence" containing the new sentence.`;
-    const vocabResult = await callGemini(vocabPrompt, true);
+Text to correct: "${transcript}"
 
-    if (vocabResult && vocabResult.enhanced_sentence && vocabResult.enhanced_sentence.toLowerCase() !== 'none') {
-        vocabSuggestionOutput.textContent = vocabResult.enhanced_sentence;
-    } else {
-        vocabSuggestionOutput.textContent = "The sentence is already well-phrased.";
+Corrected text:`;
+        
+        const correctedText = await callGemini(correctionPrompt);
+        correctedTextOutput.textContent = correctedText;
+
+        // 2. Enhanced vocabulary suggestion
+        const vocabPrompt = `Analyze this sentence and suggest ONE vocabulary enhancement by replacing a common word with a more sophisticated synonym. Return ONLY a JSON object in this exact format:
+        
+{"enhanced_sentence": "the improved sentence here"}
+
+If no improvement is possible, return:
+{"enhanced_sentence": "None"}
+
+Sentence to analyze: "${correctedText}"`;
+
+        const vocabResult = await callGemini(vocabPrompt, true);
+
+        if (vocabResult && vocabResult.enhanced_sentence && vocabResult.enhanced_sentence.toLowerCase() !== 'none') {
+            vocabSuggestionOutput.textContent = vocabResult.enhanced_sentence;
+        } else {
+            vocabSuggestionOutput.textContent = "The sentence is already well-phrased.";
+        }
+
+        // 3. Enhanced assistant response
+        const responsePrompt = `You are a friendly English conversation coach. A student just said: "${correctedText}"
+
+Give a brief, encouraging response (1-2 sentences) and ask ONE follow-up question to continue the conversation. Be natural and supportive. Do not mention grammar corrections.
+
+Response:`;
+        
+        const assistantFeedback = await callGemini(responsePrompt);
+        assistantResponseOutput.textContent = assistantFeedback;
+        
+        // 4. Speak the conversational reply
+        speak(assistantFeedback);
+    } catch (error) {
+        console.error('Error processing transcript:', error);
+        correctedTextOutput.textContent = 'Error processing your speech. Please try again.';
     }
-
-    // 3. Get assistant conversational reply
-    const responsePrompt = `Act as a friendly communication coach. A user said: "${correctedText}". Your task is to give a brief, encouraging reply and then ask a natural, open-ended follow-up question to keep the conversation going. Do not mention the correction. Example: "That sounds lovely! What was the weather like?"`;
-    const assistantFeedback = await callGemini(responsePrompt);
-    assistantResponseOutput.textContent = assistantFeedback;
-    
-    // 4. Speak the conversational reply
-    speak(assistantFeedback);
 
     speechLoader.classList.add('hidden');
 }
@@ -213,7 +239,17 @@ correctTextBtn.addEventListener('click', async () => {
     }
     textLoader.classList.remove('hidden');
     textCorrectionOutput.textContent = '';
-    const prompt = `Correct the grammar of the following text: "${text}"`;
+    
+    const prompt = `You are an expert English grammar checker and writing coach. Please:
+1. Correct any grammatical errors, spelling mistakes, and punctuation issues
+2. Improve sentence structure and clarity if needed
+3. Keep the original meaning intact
+4. If the text is already perfect, return it as is
+
+Text to improve: "${text}"
+
+Improved text:`;
+    
     const correctedText = await callGemini(prompt);
     textCorrectionOutput.textContent = correctedText;
     textLoader.classList.add('hidden');
@@ -265,24 +301,46 @@ async function loadNewQuestion() {
     quizFeedback.textContent = '';
     quizOptions.innerHTML = '';
 
-    const prompt = `Generate a simple multiple-choice quiz question about English communication (synonyms, antonyms, or basic grammar) with 4 options. Format the response as a single JSON object with three keys: "question" (a string), "options" (an array of 4 strings), and "correctAnswerIndex" (a number from 0 to 3).`;
+    const prompt = `Generate a multiple choice question about English language skills. Return ONLY a JSON object in this exact format:
+
+{
+  "question": "What is the synonym of 'happy'?",
+  "options": ["sad", "joyful", "angry", "tired"],
+  "correctAnswerIndex": 1
+}
+
+Topics: synonyms, antonyms, grammar rules, or vocabulary. Make it moderately challenging but not too difficult. Ensure the correctAnswerIndex is a number (0, 1, 2, or 3).`;
     
-    currentQuizQuestion = await callGemini(prompt, true);
+    try {
+        currentQuizQuestion = await callGemini(prompt, true);
+        
+        quizLoader.classList.add('hidden');
+        quizQuestionContainer.classList.remove('hidden');
 
-    quizLoader.classList.add('hidden');
-    quizQuestionContainer.classList.remove('hidden');
-
-    if (currentQuizQuestion && currentQuizQuestion.question) {
-        quizQuestion.textContent = currentQuizQuestion.question;
-        currentQuizQuestion.options.forEach((option, index) => {
-            const button = document.createElement('button');
-            button.textContent = option;
-            button.classList.add('w-full', 'p-3', 'bg-gray-200', 'rounded-lg', 'hover:bg-gray-300', 'transition-colors');
-            button.onclick = () => handleAnswer(index);
-            quizOptions.appendChild(button);
-        });
-    } else {
-         quizQuestion.textContent = "Failed to load a question. Please try again.";
+        if (currentQuizQuestion && currentQuizQuestion.question && currentQuizQuestion.options && Array.isArray(currentQuizQuestion.options) && currentQuizQuestion.options.length === 4) {
+            quizQuestion.textContent = currentQuizQuestion.question;
+            
+            currentQuizQuestion.options.forEach((option, index) => {
+                const button = document.createElement('button');
+                button.textContent = option;
+                button.className = 'w-full p-3 text-left bg-white border border-gray-300 rounded hover:bg-blue-50 transition-colors';
+                button.onclick = () => handleAnswer(index);
+                quizOptions.appendChild(button);
+            });
+        } else {
+            throw new Error('Invalid question format received');
+        }
+    } catch (error) {
+        console.error('Quiz generation error:', error);
+        quizLoader.classList.add('hidden');
+        quizQuestionContainer.classList.remove('hidden');
+        quizQuestion.textContent = 'Error loading question. Please try again.';
+        
+        const retryButton = document.createElement('button');
+        retryButton.textContent = 'Try Again';
+        retryButton.className = 'w-full p-3 bg-blue-600 text-white rounded hover:bg-blue-700';
+        retryButton.onclick = loadNewQuestion;
+        quizOptions.appendChild(retryButton);
     }
 }
 
