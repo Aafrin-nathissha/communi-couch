@@ -58,18 +58,24 @@ tabs.forEach(tab => {
 // --- Secure AI API Integration ---
 async function callGemini(prompt, isJson = false) {
     try {
+        console.log('Making API call with prompt:', prompt, 'isJson:', isJson);
+        
         const response = await fetch('https://communication-coach-cysggqsh6-aafrin-nathisshas-projects.vercel.app/api/gemini', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ prompt, isJson })
         });
 
+        console.log('Response status:', response.status);
+
         if (!response.ok) {
             const errorData = await response.json();
+            console.error('API Error Response:', errorData);
             throw new Error(errorData.error || `API Error: ${response.statusText}`);
         }
 
         const result = await response.json();
+        console.log('API Success Response:', result);
         
         if (result.error) {
             throw new Error(result.error);
